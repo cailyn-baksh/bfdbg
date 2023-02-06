@@ -4,14 +4,21 @@
 #include <stddef.h>
 
 /*
+ * cell_size		The size of each cell in bytes
+ * tape_size		The length of the memory tape
  *
+ * tape				A pointer to the memory block for the memory tape.
  */
-typedef struct {
+struct InterpreterConfig {
 	size_t cell_size;
 	size_t tape_size;
 
 	void **tape;
-} InterpreterConfig;
+};
+
+#ifndef _NOEXTERN
+extern struct InterpreterConfig interpreter_config;
+#endif  // _NOEXTERN
 
 #endif  // _INTERPRETER_H_
 

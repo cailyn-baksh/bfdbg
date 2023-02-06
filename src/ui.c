@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "interpreter.h"
 #include "ui.h"
 
 Pane *create_pane(uint32_t id, int h, int w, int y, int x, char *title, PaneRendererCb *renderer) {
@@ -49,3 +50,23 @@ void render_pane(Pane *pane) {
 
 	wrefresh(pane->window);
 }
+
+
+/* Specific pane renderers */
+void MemPaneRenderer(Pane *pane) {
+	int x = 1, y = 1;
+
+	for (size_t i=0; i < interpreter_config.tape_size * interpreter_config.cell_size; ++i) {
+		uint8_t byte = *(((uint8_t *)interpreter_config.tape) + i);
+
+		mvwprintw(pane->window, y, x, "%02X", byte);
+
+		x += 3;
+
+		if (x > pane->w) {
+			x = 1;
+			++y;
+		}
+	}
+}
+
