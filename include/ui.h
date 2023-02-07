@@ -43,6 +43,7 @@ void delete_pane(Pane *pane);
 
 /* Specific pane renderers */
 void MemPaneRenderer(Pane *pane);
+void OutPaneRenderer(Pane *pane);
 
 #endif  // _UI_H_
 

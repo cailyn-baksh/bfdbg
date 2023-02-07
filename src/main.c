@@ -16,27 +16,30 @@
 #include "interpreter.h"
 #undef _NOEXTERN
 
-#define FRAMERATE 24
-
-#define PANE_PROG	0x1
-#define PANE_OUT	0x2
-#define PANE_MEM	0x3
-
-#define THRD_NANOSLEEP(ns) thrd_sleep(&(struct timespec){.tv_nsec=ns}, NULL);
-#define THRD_SLEEP(s) thrd_sleep(&(struct timespec){.tv_sec=s}, NULL);
-
 #if defined(__STDC_NO_THREADS__) || defined(__STDC_NO_ATOMICS__)
 #error "C11 thread support is required for this program!"
 #endif  // thread support
 
+// number of frames to render each second
+#define FRAMERATE 24
+
+// pane IDs
+#define PANE_PROG	0x1
+#define PANE_OUT	0x2
+#define PANE_MEM	0x3
+
+// shorthand for thread sleep functions
+#define THRD_NANOSLEEP(ns) thrd_sleep(&(struct timespec){.tv_nsec=ns}, NULL);
+#define THRD_SLEEP(s) thrd_sleep(&(struct timespec){.tv_sec=s}, NULL);
+
 // TODO: should this be atomic?
-struct InterpreterConfig interpreter_config = {
+struct BrainfuckVM bfvm = {
 	.cell_size = 1,
 	.tape_size = 1024,
 
 	.current_cell = 0,
 
-	.tape = NULL
+	.tape = NULL,
 };
 
 void print_help(char *prgname) {
@@ -74,7 +77,7 @@ int main(int argc, char *argv[]) {
 					return 1;
 				}
 
-				interpreter_config.cell_size = size;
+				bfvm.cell_size = size;
 				break;
 			}
 			case 'm': {
@@ -90,7 +93,7 @@ int main(int argc, char *argv[]) {
 					return 1;
 				}
 
-				interpreter_config.tape_size = size;
+				bfvm.tape_size = size;
 				break;
 			}
 			case 'R':
@@ -104,7 +107,9 @@ int main(int argc, char *argv[]) {
 	/* Start interpreter thread */
 
 	// alloc tape (zero-initialized)
-	interpreter_config.tape = calloc(interpreter_config.tape_size, interpreter_config.cell_size);
+	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
+
+	StringCassette_init(&bfvm.output, 16);
 
 	if (optind < argc) {
 		// FILE positional argument specified
@@ -126,7 +131,7 @@ int main(int argc, char *argv[]) {
 	// Create UI panes
 	Pane *panes[] = {
 		create_pane(PANE_PROG, LINES / 2, COLS / 2, 0, 0, "Program", NULL),
-		create_pane(PANE_OUT, LINES / 2, COLS / 2, LINES / 2, 0, "Output", NULL),
+		create_pane(PANE_OUT, LINES / 2, COLS / 2, LINES / 2, 0, "Output", OutPaneRenderer),
 		create_pane(PANE_MEM, LINES, COLS / 2, 0, COLS / 2, "Memory", MemPaneRenderer),
 		NULL
 	};	
@@ -141,11 +146,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* Handle Key Events */
-		do {
+		do {  // do ensures that key events do eventually get processed even if
+			  // rendering takes the full frame time
 			if ((ch = getch()) != ERR) {
 				switch (ch) {
 					case '+':
-						interpreter_config.current_cell++;
 					case '-':
 					case '>':
 					case '<':

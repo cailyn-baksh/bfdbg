@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#include "cassette.h"
+
 /*
  * cell_size		The size of each cell in bytes
  * tape_size		The length of the memory tape
@@ -10,17 +12,19 @@
  *
  * tape				A pointer to the memory block for the memory tape.
  */
-struct InterpreterConfig {
+struct BrainfuckVM {
 	size_t cell_size;
 	size_t tape_size;
 
 	size_t current_cell;
 
 	void **tape;
+
+	StringCassette output;
 };
 
 #ifndef _NOEXTERN
-extern struct InterpreterConfig interpreter_config;
+extern struct BrainfuckVM bfvm;
 #endif  // _NOEXTERN
 
 #endif  // _INTERPRETER_H_
