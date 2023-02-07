@@ -6,12 +6,15 @@
 /*
  * cell_size		The size of each cell in bytes
  * tape_size		The length of the memory tape
+ * current_cell		The current cell index
  *
  * tape				A pointer to the memory block for the memory tape.
  */
 struct InterpreterConfig {
 	size_t cell_size;
 	size_t tape_size;
+
+	size_t current_cell;
 
 	void **tape;
 };

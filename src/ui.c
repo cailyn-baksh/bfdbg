@@ -59,7 +59,11 @@ void MemPaneRenderer(Pane *pane) {
 	for (size_t i=0; i < interpreter_config.tape_size * interpreter_config.cell_size; ++i) {
 		uint8_t byte = *(((uint8_t *)interpreter_config.tape) + i);
 
+		if (i == interpreter_config.current_cell) wattron(pane->window, A_REVERSE);
+
 		mvwprintw(pane->window, y, x, "%02X", byte);
+		
+		if (i == interpreter_config.current_cell) wattroff(pane->window, A_REVERSE);
 
 		x += 3;
 
