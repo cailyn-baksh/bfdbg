@@ -50,15 +50,17 @@ void print_help(char *prgname) {
 		   "         \tbetween 1 and %zd. Default is 1.\n", sizeof(uintmax_t));
 	printf("  -h     \tDisplay this help message.\n");
 	printf("  -m SIZE\tSet the length of the memory tape. Default is 1024.\n");
+	printf("  -O SIZE\tSet the max length of the output buffer. Default is 4096.\n");
 	printf("  -R     \tRecord program input to FILE.\n");
 }
 
 int main(int argc, char *argv[]) {
 	/* Init */
 	int ch;
+	unsigned long long output_tape_len = 4096;
 
 	/* Parse command line args */
-	while ((ch = getopt(argc, argv, "c:hm:R")) != -1) {
+	while ((ch = getopt(argc, argv, "c:hm:O:R")) != -1) {
 		switch (ch) {
 			case 'h':
 				// Print help
@@ -96,6 +98,22 @@ int main(int argc, char *argv[]) {
 				bfvm.tape_size = size;
 				break;
 			}
+			case 'O': {
+				// Set output tape length
+				char *endptr = NULL;
+				unsigned long long size = strtoull(optarg, &endptr, 10);
+
+				if ((*optarg != '\0' && *endptr != '\0')  // extra characters in arg
+				 || size > SIZE_MAX  // too big
+				 || errno == EINVAL  // invalid
+				 || errno == ERANGE) {  // too big 2
+					fprintf(stderr, "Invalid argument for option -O: '%s'\n", optarg);
+					return 1;
+				}
+
+				output_tape_len = size;
+				break;
+			}
 			case 'R':
 				break;
 			default:
@@ -109,7 +127,8 @@ int main(int argc, char *argv[]) {
 	// alloc tape (zero-initialized)
 	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
 
-	StringCassette_init(&bfvm.output, 16);
+	StringCassette_init(&bfvm.output, output_tape_len);
+	StringCassette_write(&bfvm.output, "Hello World!");
 
 	if (optind < argc) {
 		// FILE positional argument specified
@@ -170,6 +189,9 @@ int main(int argc, char *argv[]) {
 							// ESC
 							goto end_mainloop;
 						}
+						break;
+					default:
+						StringCassette_write(&bfvm.output, "Hello World!");
 						break;
 				}
 			}

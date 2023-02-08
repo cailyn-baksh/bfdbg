@@ -75,6 +75,32 @@ void MemPaneRenderer(Pane *pane) {
 }
 
 void OutPaneRenderer(Pane *pane) {
-	
+	const size_t bufsize = bfvm.output.length / 8;
+	char buffer[bufsize];
+
+	wmove(pane->window, 1, 1);
+
+	for (size_t i=0; i < bfvm.output.length; i += bufsize) {
+		StringCassette_read(&bfvm.output, bufsize, buffer, i);
+
+		for (size_t j=0; j < bufsize; ++j) {
+			if (buffer[j] == '\0') {
+				break;
+			} else {
+				int x, y;
+				getyx(pane->window, y, x);
+
+				if (x == pane->w-1) {
+					wmove(pane->window, y+1, 1);
+				}
+
+				if (y == pane->h-1) {
+					// TODO: figure out scrolling
+				}
+
+				waddch(pane->window, buffer[j]);
+			}
+		}
+	}
 }
 
