@@ -35,6 +35,11 @@ void delete_pane(Pane *pane) {
 }
 
 void render_pane(Pane *pane) {
+	// Call pane renderer
+	if (pane->renderer != NULL) {
+		pane->renderer(pane);
+	}
+
 	// Draw pane border + title
 	box(pane->window, 0, 0);
 
@@ -42,10 +47,6 @@ void render_pane(Pane *pane) {
 		mvwaddch(pane->window, 0, 2, ACS_RTEE);
 		wprintw(pane->window, " %s ", pane->title);
 		waddch(pane->window, ACS_LTEE);
-	}
-
-	if (pane->renderer != NULL) {
-		pane->renderer(pane);
 	}
 
 	wrefresh(pane->window);
@@ -80,22 +81,24 @@ void OutPaneRenderer(Pane *pane) {
 
 	wmove(pane->window, 1, 1);
 
-	for (size_t i=0; i < bfvm.output.length; i += bufsize) {
+	for (size_t i=StringCassette_getHead(&bfvm.output), b=0; b < bfvm.output.length; i += bufsize, b += bufsize) {
 		StringCassette_read(&bfvm.output, bufsize, buffer, i);
 
 		for (size_t j=0; j < bufsize; ++j) {
 			if (buffer[j] == '\0') {
-				break;
+				continue;
 			} else {
 				int x, y;
 				getyx(pane->window, y, x);
 
 				if (x == pane->w-1) {
-					wmove(pane->window, y+1, 1);
+					wmove(pane->window, ++y, 1);
 				}
 
 				if (y == pane->h-1) {
-					// TODO: figure out scrolling
+					scroll(pane->window);
+					wmove(pane->window, y-1, 1);
+					wclrtoeol(pane->window);
 				}
 
 				waddch(pane->window, buffer[j]);

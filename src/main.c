@@ -155,6 +155,8 @@ int main(int argc, char *argv[]) {
 		NULL
 	};	
 
+	scrollok(panes[1]->window, TRUE);
+
 	/* Mainloop */
 	for (;;) {
 		clock_t loop_start = clock();

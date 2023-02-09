@@ -14,8 +14,13 @@ typedef struct {
 
 	char *_data;   // Pointer to the start of the memory block
 				   // This pointer 'owns' the memory and should be freed
-	size_t _tail;  // Offset from _data to the end of the tape.
+	size_t _tail;  // Offset from _data to the end of the tape. (Points to the end of the tape)
 } StringCassette;
+
+/*
+ * Returns the index of the start of data in the cassette.
+ */
+#define StringCassette_getHead(c) (((c)->_tail+1 < (c)->length) ? (c)->_tail+1 : 0)
 
 /*
  * Initializes a cassette
