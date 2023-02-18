@@ -53,8 +53,10 @@ void StringCassette_write(StringCassette *c, const char *s);
  * n		The number of bytes to read.
  * buf		The buffer to read into
  * offset	The offset to start reading from
+ *
+ * Returns the offset of the next byte in the tape
  */
-void StringCassette_read(StringCassette *c, size_t n, char *buf, size_t offset);
+size_t StringCassette_read(StringCassette *c, size_t n, char *buf, size_t offset);
 
 #endif  // _CASSETTE_H_
 

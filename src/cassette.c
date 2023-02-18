@@ -23,9 +23,9 @@ void StringCassette_write(StringCassette *c, const char *s) {
 	}
 }
 
-void StringCassette_read(StringCassette *c, size_t n, char *buf, size_t offset) {
+size_t StringCassette_read(StringCassette *c, size_t n, char *buf, size_t offset) {
 	// ensure offset is within array bounds
-	size_t index = offset % c->length;
+	size_t index = (offset) % c->length;
 
 	// loop until n bytes are copied
 	for (size_t b=0; b < n; ++b, ++index) {
@@ -37,6 +37,8 @@ void StringCassette_read(StringCassette *c, size_t n, char *buf, size_t offset) 
 	}
 
 	// write null terminator to end
-	buf[n] = '\0';
+	//buf[n] = '\0';
+	if (index > c->length) index = 0;
+	return index;
 }
 

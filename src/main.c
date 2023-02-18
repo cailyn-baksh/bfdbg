@@ -192,8 +192,11 @@ int main(int argc, char *argv[]) {
 							goto end_mainloop;
 						}
 						break;
-					default:
-						StringCassette_write(&bfvm.output, "Hello World!");
+					default: {
+						char buf[2] = { 0 };
+						sprintf(buf, "%c", ch);
+						StringCassette_write(&bfvm.output, buf);
+					}
 						break;
 				}
 			}

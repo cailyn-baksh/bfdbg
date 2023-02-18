@@ -76,17 +76,23 @@ void MemPaneRenderer(Pane *pane) {
 }
 
 void OutPaneRenderer(Pane *pane) {
-	const size_t bufsize = bfvm.output.length / 8;
+	const size_t bufsize = (bfvm.output.length < 4096) ? bfvm.output.length : 4096;
 	char buffer[bufsize];
 
+	wclear(pane->window);
 	wmove(pane->window, 1, 1);
 
-	for (size_t i=StringCassette_getHead(&bfvm.output), b=0; b < bfvm.output.length; i += bufsize, b += bufsize) {
-		StringCassette_read(&bfvm.output, bufsize, buffer, i);
+	for (size_t i=StringCassette_getHead(&bfvm.output), b=0; b < bfvm.output.length; b += bufsize) {
+		i = StringCassette_read(&bfvm.output, bufsize, buffer, i);
+		//memcpy(buffer, bfvm.output._data, bufsize);
 
 		for (size_t j=0; j < bufsize; ++j) {
 			if (buffer[j] == '\0') {
 				continue;
+			} else if (buffer[j] == '\n') {
+				int x, y;
+				getyx(pane->window, y, x);
+				wmove(pane->window, y+1, 1);
 			} else {
 				int x, y;
 				getyx(pane->window, y, x);
