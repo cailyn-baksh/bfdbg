@@ -54,6 +54,29 @@ void print_help(char *prgname) {
 	printf("  -R     \tRecord program input to FILE.\n");
 }
 
+/*
+ * Gets an integer argument from getopt.
+ *
+ * max_val		The maximum value for the integer
+ *
+ * Returns the value in optarg.
+ * If a value cannot be parsed, then errno is set to EINVAL.
+ */
+unsigned long long get_int_arg(unsigned long long max_val) {
+	char *endptr = NULL;
+	unsigned long long val = strtoull(optarg, &endptr, 10);
+
+	if ((*optarg != '\0' && *endptr != '\0')  // extra characters in arg
+	|| val > max_val  // too big
+	|| errno == EINVAL  // invalid
+	|| errno == ERANGE) {  // too big 2
+		errno = EINVAL;
+		return 0;
+	}
+
+	return val;
+}
+
 int main(int argc, char *argv[]) {
 	/* Init */
 	int ch;
@@ -66,54 +89,36 @@ int main(int argc, char *argv[]) {
 				// Print help
 				print_help(argv[0]);
 				return 0;
-			case 'c': {
+			case 'c':
 				// Set cell size
-				char *endptr = NULL;
-				unsigned long long size = strtoull(optarg, &endptr, 10);
+				bfvm.cell_size = get_int_arg(sizeof(uintmax_t));
 
-				if ((*optarg != '\0' && *endptr != '\0')  // extra characters in arg
-				 || size > sizeof(uintmax_t)  // size is too long
-				 || errno == EINVAL  // invalid
-				 || errno == ERANGE) {  // too big
+				if (errno == EINVAL) {
 					fprintf(stderr, "Invalid argument for option -c: '%s'\n", optarg);
 					return 1;
 				}
 
-				bfvm.cell_size = size;
 				break;
-			}
-			case 'm': {
+			case 'm':
 				// Set memory tape length
-				char *endptr = NULL;
-				unsigned long long size = strtoull(optarg, &endptr, 10);
+				bfvm.tape_size = get_int_arg(SIZE_MAX);
 
-				if ((*optarg != '\0' && *endptr != '\0')  // extra characters in arg
-				 || size > SIZE_MAX  // too big
-				 || errno == EINVAL  // invalid
-				 || errno == ERANGE) {  // too big 2
+				if (errno == EINVAL) {
 					fprintf(stderr, "Invalid argument for option -m: '%s'\n", optarg);
 					return 1;
 				}
 
-				bfvm.tape_size = size;
 				break;
-			}
-			case 'O': {
+			case 'O':
 				// Set output tape length
-				char *endptr = NULL;
-				unsigned long long size = strtoull(optarg, &endptr, 10);
+				output_tape_len = get_int_arg(SIZE_MAX);
 
-				if ((*optarg != '\0' && *endptr != '\0')  // extra characters in arg
-				 || size > SIZE_MAX  // too big
-				 || errno == EINVAL  // invalid
-				 || errno == ERANGE) {  // too big 2
+				if (errno == EINVAL) {
 					fprintf(stderr, "Invalid argument for option -O: '%s'\n", optarg);
 					return 1;
 				}
 
-				output_tape_len = size;
 				break;
-			}
 			case 'R':
 				break;
 			default:
@@ -128,7 +133,6 @@ int main(int argc, char *argv[]) {
 	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
 
 	StringCassette_init(&bfvm.output, output_tape_len);
-	StringCassette_write(&bfvm.output, "Hello World!");
 
 	if (optind < argc) {
 		// FILE positional argument specified
@@ -141,6 +145,7 @@ int main(int argc, char *argv[]) {
 
 	initscr();
 	cbreak();
+	noecho();
 	keypad(stdscr, TRUE);
 	nodelay(stdscr, TRUE);
 	curs_set(0);
@@ -171,6 +176,14 @@ int main(int argc, char *argv[]) {
 			  // rendering takes the full frame time
 			if ((ch = getch()) != ERR) {
 				switch (ch) {
+					case 27:  // ALT or ESC
+						if ((ch = getch()) != ERR) {
+							// ALT
+						} else {
+							// ESC
+							goto end_mainloop;
+						}
+						break;
 					case '+':
 					case '-':
 					case '>':
@@ -179,24 +192,10 @@ int main(int argc, char *argv[]) {
 					case ',':
 					case '[':
 					case ']':
-					case KEY_ENTER:
+						// dispatch instruction to interpreter
+					default:
 						// if in record mode record input
 						// enter key should insert a newline 
-						break;
-					case 27:  // ALT or ESC
-						//THRD_NANOSLEEP(10000000);  // sleep for ~10ms to see if another code comes in
-						if ((ch = getch()) != ERR) {
-							// ALT
-						} else {
-							// ESC
-							goto end_mainloop;
-						}
-						break;
-					default: {
-						char buf[2] = { 0 };
-						sprintf(buf, "%c", ch);
-						StringCassette_write(&bfvm.output, buf);
-					}
 						break;
 				}
 			}

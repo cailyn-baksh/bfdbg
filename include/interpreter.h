@@ -27,5 +27,7 @@ struct BrainfuckVM {
 extern struct BrainfuckVM bfvm;
 #endif  // _NOEXTERN
 
+int interpreter_thread(void *arg);
+
 #endif  // _INTERPRETER_H_
 
