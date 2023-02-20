@@ -66,9 +66,10 @@ void Queue_enqueue(Queue *queue, char value) {
 		_Queue_alloc_node(queue);
 	}
 
-	// Insert the value to the appropriate index.
+	// Insert the value to the appropriate index and increment the length
 	queue->_last->_data[queue->_last->length] = value;
-	queue->_last->length += 1;
+	++queue->_last->length;
+	++queue->length; 
 }
 
 
@@ -97,6 +98,9 @@ void Queue_enqueue_all(Queue *queue, size_t n, char *values) {
 
 		// Increment i by the number of copied bytes
 		i += nbytes;
+
+		queue->_last->length += nbytes;
+		queue->length += nbytes;
 	}
 
 }
@@ -115,14 +119,25 @@ char Queue_dequeue(Queue *queue) {
 	// Reduce the length and advance the head
 	// This way we dont have to use memmove
 	--queue->_first->length;
+	--queue->length;
 	++queue->_first->_head;
+
+	if (queue->_first->length == 0) {
+		// the first node in the queue is now empty
+		if (queue->_first == queue->_last) {
+			// Theres only one node in the queue; reset the node
+			queue->_first->_head = 0;
+		} else {
+			// Theres more than one node in the queue. Free this node and delete it
+			queue->_first = queue->_first->_next;
+			free(queue->_first->_prev);
+			queue->_first->_prev = NULL;
+		}
+	}
 
 	if (queue->_first->length == 0 && queue->_first != queue->_last) {
 		// the first node in the queue is now empty and there is more than one
 		// node in the queue. Free this node and delete it
-		queue->_first = queue->_first->_next;
-		free(queue->_first->_prev);
-		queue->_first->_prev = NULL;
 	}
 
 	return val;
