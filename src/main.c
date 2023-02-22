@@ -40,7 +40,7 @@ struct BrainfuckVM bfvm = {
 
 	.current_cell = 0,
 
-	.tape = NULL,
+	.tape = NULL
 };
 
 void print_help(char *prgname) {
@@ -78,73 +78,17 @@ unsigned long long get_int_arg(unsigned long long max_val) {
 	return val;
 }
 
-void test_queue() {
-	Queue q;
-	Queue_init(&q);
-
-	// Test normal enqueues and a small enqueue_all
-	Queue_enqueue(&q, 'a');
-	Queue_enqueue(&q, 'b');
-	Queue_enqueue(&q, 'c');
-
-	Queue_enqueue_all(&q, 3, "fag");
-
-	while (q.length > 0) {
-		printf("%c", Queue_dequeue(&q));
-	}
-
-	printf("\n");
-
-	// test multiple nodes
-	char buf[128];
-
-	for (int i=0; i < 128; ++i) {
-		// populate with some printable characters
-		buf[i] = (i % 94) + 32;
-	}
-
-	Queue_enqueue_all(&q, 128, buf);
-
-	while (q.length > 0) {
-		printf("%c", Queue_dequeue(&q));
-	}
-
-	printf("\n");
-
-	// Test normal enqueues again to make sure nothing broke after all those dequeues
-	Queue_enqueue(&q, 'h');
-	char r = Queue_dequeue(&q);
-
-	if (r == 0) printf("failed to dequeue\n");
-	printf("%c\n%zd\n", r, q.length);
-
-	Queue_enqueue_all(&q, 4, "test");
-
-	printf("%zd\n", q.length);
-
-	while (q.length > 0) {
-		printf("%c", Queue_dequeue(&q));
-	}
-
-	printf("\n");
-
-	Queue_free(&q);
-}
-
 int main(int argc, char *argv[]) {
 	/* Init */
 	int ch;
 	unsigned long long output_tape_len = 4096;
 
 	/* Parse command line args */
-	while ((ch = getopt(argc, argv, "Qc:hm:O:R")) != -1) {
+	while ((ch = getopt(argc, argv, "c:d:hMm:O:R")) != -1) {
 		switch (ch) {
 			case 'h':
 				// Print help
 				print_help(argv[0]);
-				return 0;
-			case 'Q':
-				test_queue();
 				return 0;
 			case 'c':
 				// Set cell size
@@ -155,6 +99,13 @@ int main(int argc, char *argv[]) {
 					return 1;
 				}
 
+				break;
+			case 'd':
+				// Set tick delay
+				break;
+			case 'M':
+				// Manual mode
+				
 				break;
 			case 'm':
 				// Set memory tape length
@@ -185,12 +136,14 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Start interpreter thread */
+	StringCassette_init(&bfvm.output, output_tape_len);
+	Queue_init(&bfvm.instructionQueue);
 
-	// alloc tape (zero-initialized)
+	mtx_init(&bfvm.exec_mutex, mtx_plain);
+
 	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
 
-	StringCassette_init(&bfvm.output, output_tape_len);
-
+	// alloc tape (zero-initialized)
 	if (optind < argc) {
 		// FILE positional argument specified
 	} else {
@@ -265,6 +218,8 @@ end_mainloop:
 		delete_pane(panes[i]);
 	}
 	endwin();
+	
+	free(bfvm.tape);
 
 	return 0;
 }

@@ -3,21 +3,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <threads.h>
 
-/*
- * Queue implementation optimized for this application
- *
- * Queue is implemented as a doubly linked list
- * each node in the list is an array that holds a fixed number of elements
- * thus, the overhead of the doubly linked list is balanced with the size of
- * the data elements
- *
- * each queue node keeps track of its head index. As values are dequeued, the
- * length is decremented and the head index is incremented. when length drops
- * to 0, the node is discarded and replaced by the next node. this avoids the
- * hassle of trying to shift values around in memory and carry them over
- * between nodes
- */
 
 #define QUEUE_NODE_SIZE	64
 
@@ -33,11 +20,11 @@
  * _data		The data in the array
  */
 struct QueueNode {
-	struct QueueNode *_prev;
-	struct QueueNode *_next;
+	struct QueueNode *_Atomic _prev;
+	struct QueueNode *_Atomic _next;
 
-	uint8_t length;
-	uint8_t _head;
+	_Atomic uint8_t length;
+	_Atomic uint8_t _head;
 	char _data[QUEUE_NODE_SIZE];
 };
 
@@ -46,15 +33,23 @@ struct QueueNode {
  *
  * length		The total length of the queue. This is equal to the sum of
  * 				every node's length member.
- * _first		The first node in the queue. If this is NULL, then _last must
+ * _head		Pointer to the head node. If this is NULL, then _tail must
  * 				also be NULL.
- * _last		The last node in the queue
+ * _tail		Pointer to the tail node
+ *
+ * _head_lock	Mutex locking head modification. If the same thread is trying to
+ * 				lock both the head and the tail simultaneously, then the head
+ * 				lock must be acquired first to avoid deadlock.
+ * _tail_lock	Mutex locking tail modification.
  */
 typedef struct {
-	size_t length;
+	_Atomic size_t length;
 
-	struct QueueNode *_first;
-	struct QueueNode *_last;
+	struct QueueNode *_Atomic _head;
+	struct QueueNode *_Atomic _tail;
+
+	mtx_t _head_lock;
+	mtx_t _tail_lock;
 } Queue;
 
 /*

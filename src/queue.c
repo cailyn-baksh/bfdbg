@@ -1,40 +1,32 @@
 #include <stdlib.h>
 #include <string.h>
+#include <threads.h>
 
 #include "queue.h"
 
-#define IMIN(a,b) ({typeof(a) _a = a, _b = b;(_a < _b) ? _a : _b;})
+// NOTE: i was stoned when i wrote the thread safety for this so its probably not very good
+// TODO: add error handling for failed mutex acquisitions
 
-/*
- * To optimize enqueuing and dequeuing in cases where lots of data is being
- * enqueued and then dequeued (for example, when the user enters in a lengthy
- * piece of code and then runs it all at once), a spare QueueNode is kept
- * around instead of being freed after it has been allocated. Then, then a new
- * QueueNode is needed, this one is reinitialized instead of being malloc'd.
- * The intention of this optimization is to prevent the appropriate amount of
- * space from being allocated by the OS, then that memory being later returned
- * to the OS, reassigned to another process, and then the same amount of memory
- * being requested by this process immediately after (and thus forcing the OS
- * to find another block that can be assigned for this purpose).
- *
- * NOTE: i dont actually know if this is a worthwhile optimization; consider
- * NOTE: removing it in the future
- */
-struct QueueNode *spare = NULL;
+#define IMIN(a,b) ({typeof(a) _a = a, _b = b;(_a < _b) ? _a : _b;})
 
 void Queue_init(Queue *queue) {
 	queue->length = 0;
 
-	queue->_first = NULL;
-	queue->_last = NULL;
+	queue->_head = NULL;
+	queue->_tail = NULL;
+
+	mtx_init(&queue->_head_lock, mtx_plain);
+	mtx_init(&queue->_tail_lock, mtx_plain);
 }
 
 void Queue_free(Queue *queue) {
-
-	for (struct QueueNode *ptr=queue->_first; ptr != NULL; ptr = queue->_first) {
-		queue->_first = ptr->_next;
+	for (struct QueueNode *ptr=queue->_head; ptr != NULL; ptr = queue->_head) {
+		queue->_head = ptr->_next;
 		free(ptr);
 	}
+
+	mtx_destroy(&queue->_head_lock);
+	mtx_destroy(&queue->_tail_lock);
 }
 
 /*
@@ -43,42 +35,74 @@ void Queue_free(Queue *queue) {
 void _Queue_alloc_node(Queue *queue) {
 	struct QueueNode *newNode = malloc(sizeof(struct QueueNode));
 
-	newNode->_prev = queue->_last;
+	newNode->_prev = queue->_tail;
 	newNode->_next = NULL;
 	newNode->length = 0;
 	newNode->_head = 0;
 
-	if (queue->_last == NULL) {
+	if (queue->_tail == NULL) {
 		// _last being null means _first is NULL or invalid, so we have to set it
-		queue->_first = newNode;
+		queue->_head = newNode;
 	} else {
 		// link last node to this one
-		queue->_last->_next = newNode;
+		queue->_tail->_next = newNode;
 	}
 
 	// Update the queue's last node ptr to point to this node
-	queue->_last = newNode;
+	queue->_tail = newNode;
 }
 
 void Queue_enqueue(Queue *queue, char value) {
-	if (queue->_last == NULL || queue->_last->length == QUEUE_NODE_SIZE) {
-		// last node does not exist or is full; we need to make a new one
-		_Queue_alloc_node(queue);
+	bool isTailLocked = false;
+
+	if (queue->_tail == NULL || queue->_tail->length == (QUEUE_NODE_SIZE - queue->_tail->_head)) {
+		// Last node does not exist or is full; we need to make a new one
+		// lock both head and tail, as both will be modified
+		if (mtx_lock(&queue->_head_lock) == thrd_success
+		 && mtx_lock(&queue->_tail_lock) == thrd_success) {
+			_Queue_alloc_node(queue);
+
+			// Unlock head since we no longer need the head lock
+			// We still need the tail lock, so indicate that its already locked
+			mtx_unlock(&queue->_head_lock);
+			isTailLocked = true;
+		}
 	}
 
 	// Insert the value to the appropriate index and increment the length
-	queue->_last->_data[queue->_last->length] = value;
-	++queue->_last->length;
-	++queue->length; 
+	// ensure that tail is locked
+	if (isTailLocked || mtx_lock(&queue->_tail_lock) == thrd_success) {
+		// Wrtie new value to tail
+		queue->_tail->_data[queue->_tail->length] = value;
+
+		// unlock tail
+		mtx_unlock(&queue->_tail_lock);
+	}
+
+	// atomically increase the queue's length
+	++queue->_tail->length;
+	++queue->length;
 }
 
 
 void Queue_enqueue_all(Queue *queue, size_t n, char *values) {
+	bool isTailLocked = false;
+
 	for (size_t i=0; i < n; ) {
 		// Alloc node if needed
-		if (queue->_last == NULL || queue->_last->length == QUEUE_NODE_SIZE) {
-			// last node does not exist or is full; we need to make a new one
-			_Queue_alloc_node(queue);
+		if (queue->_tail == NULL
+		 || queue->_tail->length == (QUEUE_NODE_SIZE - queue->_tail->_head)) {
+			// Last node does not exist or is full; we need to make a new one
+			// lock both head and tail, as both will be modified
+			if (mtx_lock(&queue->_head_lock) == thrd_success
+			 && mtx_lock(&queue->_tail_lock) == thrd_success) {
+				_Queue_alloc_node(queue);
+
+				// Unlock head since we no longer need the head lock
+				// We still need the tail lock, so indicate that its already locked
+				mtx_unlock(&queue->_head_lock);
+				isTailLocked = true;
+			}
 		}
 
 		// figure out how much space is left in this node
@@ -87,26 +111,32 @@ void Queue_enqueue_all(Queue *queue, size_t n, char *values) {
 
 		// Calculate the number of bytes to copy; either the maximum remaining
 		// space or the total remaining bytes, whichever is less
-		uint8_t nbytes = IMIN(QUEUE_NODE_SIZE - queue->_last->length, n-i);
+		uint8_t nbytes = IMIN(QUEUE_NODE_SIZE - queue->_tail->length, n-i);
 
-		// Copy nbytes to the appropriate location
-		memcpy(
-			   &queue->_last->_data[queue->_last->length],
-			   &values[i],
-			   nbytes
-		);
+		// ensure that tail is locked
+		if (isTailLocked || mtx_lock(&queue->_tail_lock) == thrd_success) {
+			// Copy nbytes to the appropriate location
+			memcpy(
+				   &queue->_tail->_data[queue->_tail->length],
+				   &values[i],
+				   nbytes
+			);
+
+			// Unlock tail
+			mtx_unlock(&queue->_tail_lock);
+		}
 
 		// Increment i by the number of copied bytes
 		i += nbytes;
 
-		queue->_last->length += nbytes;
+		queue->_tail->length += nbytes;
 		queue->length += nbytes;
 	}
 
 }
 
 char Queue_dequeue(Queue *queue) {
-	if (queue->_first == NULL || queue->_first->length == 0) {
+	if (queue->_head == NULL || queue->_head->length == 0) {
 		// No values to dequeue so return nothing
 		// yeah i know this isnt a great way to report errors but since this is
 		// a specialized implementation for this application, and silently
@@ -114,31 +144,33 @@ char Queue_dequeue(Queue *queue) {
 		return 0;
 	}
 
-	char val = queue->_first->_data[queue->_first->_head];
+	char val;
+
+	// Lock head and read front value
+	if (mtx_lock(&queue->_head_lock) == thrd_success) {
+		val = queue->_head->_data[queue->_head->_head];
+	}
 
 	// Reduce the length and advance the head
 	// This way we dont have to use memmove
-	--queue->_first->length;
+	--queue->_head->length;
 	--queue->length;
-	++queue->_first->_head;
+	++queue->_head->_head;
 
-	if (queue->_first->length == 0) {
+	if (queue->_head->length == 0) {
 		// the first node in the queue is now empty
-		if (queue->_first == queue->_last) {
+		if (queue->_head == queue->_tail) {
 			// Theres only one node in the queue; reset the node
-			queue->_first->_head = 0;
+			queue->_head->_head = 0;
 		} else {
 			// Theres more than one node in the queue. Free this node and delete it
-			queue->_first = queue->_first->_next;
-			free(queue->_first->_prev);
-			queue->_first->_prev = NULL;
+			queue->_head = queue->_head->_next;
+			free(queue->_head->_prev);
+			queue->_head->_prev = NULL;
 		}
 	}
 
-	if (queue->_first->length == 0 && queue->_first != queue->_last) {
-		// the first node in the queue is now empty and there is more than one
-		// node in the queue. Free this node and delete it
-	}
+	mtx_unlock(&queue->_head_lock);
 
 	return val;
 }

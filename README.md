@@ -14,8 +14,10 @@ This is more of a todo list for devs than a feature list for users
    - [ ] Address column
    - [ ] Multi-byte cells
  - [ ] Program view pane
- - [ ] Brainfuck interpreter in separate thread
+ - [ ] Brainfuck interpreter
+   - [ ] Variable execution speed
  - [ ] Pane scrolling
+ - [ ] Atomic Queue
 
 ## Building
 
