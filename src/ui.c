@@ -57,15 +57,21 @@ void render_pane(Pane *pane) {
 void MemPaneRenderer(Pane *pane) {
 	int x = 1, y = 1;
 
+	// calculate this once so that two cells dont get selected in one draw
+	const size_t current_cell_base = bfvm.current_cell * bfvm.cell_size;
+
 	for (size_t i=0; i < bfvm.tape_size * bfvm.cell_size; ++i) {
 		uint8_t byte = *(((uint8_t *)bfvm.tape) + i);
 
-		if (i == bfvm.current_cell) wattron(pane->window, A_REVERSE);
+		if (i >= current_cell_base && i < (current_cell_base + bfvm.cell_size))
+			wattron(pane->window, A_REVERSE);
+		else
+			wattroff(pane->window, A_REVERSE);
 
+		// TODO: draw on a cell-basis instead of a byte basis so that there isnt
+		// TODO: a blank gap between active cell highlighting
 		mvwprintw(pane->window, y, x, "%02X", byte);
 		
-		if (i == bfvm.current_cell) wattroff(pane->window, A_REVERSE);
-
 		x += 3;
 
 		if (x > pane->w) {
