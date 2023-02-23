@@ -16,10 +16,8 @@
  * current_cell		The current cell index
  * tape				A pointer to the memory block for the memory tape.
  *
- * exec_mutex		Mutex that locks execution. Acquiring this mutex from a
- *					non-interpreter thread will pause the interpreter.
- * pause			If true, the interpreter stops running.
- * stop_after		How many instructions to automatically pause after
+ * stop_after		How many instructions to automatically pause after. 0 halts
+ * 					the interpreter. -1 executes indefinitely.
  * tick_delay		Timespec specifying how long between ticks to sleep the
  * 					interpreter thread.
  *
@@ -34,10 +32,7 @@ struct BrainfuckVM {
 	size_t current_cell;
 	void **tape;
 
-	mtx_t exec_mutex;
-
-	_Atomic bool pause;
-	int stop_after;
+	_Atomic int stop_after;
 	struct timespec tick_delay;
 
 	Queue instructionQueue;

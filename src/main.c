@@ -30,8 +30,8 @@
 #define PANE_MEM	0x3
 
 // shorthand for thread sleep functions
-#define THRD_NANOSLEEP(ns) thrd_sleep(&(struct timespec){.tv_nsec=ns}, NULL);
-#define THRD_SLEEP(s) thrd_sleep(&(struct timespec){.tv_sec=s}, NULL);
+#define THRD_NANOSLEEP(ns) thrd_sleep(&(struct timespec){.tv_nsec=ns}, NULL)
+#define THRD_SLEEP(s) thrd_sleep(&(struct timespec){.tv_sec=s}, NULL)
 
 // TODO: should this be atomic?
 struct BrainfuckVM bfvm = {
@@ -39,8 +39,11 @@ struct BrainfuckVM bfvm = {
 	.tape_size = 1024,
 
 	.current_cell = 0,
+	.tape = NULL,
 
-	.tape = NULL
+	.stop_after = -1,
+
+	.tick_delay = { .tv_sec = 0, .tv_nsec = 2500000000 }
 };
 
 void print_help(char *prgname) {
@@ -49,9 +52,13 @@ void print_help(char *prgname) {
 	printf("Options:\n");
 	printf("  -c SIZE\tSet the cell size in bytes. This must be an integer \n"
 		   "         \tbetween 1 and %zd. Default is 1.\n", sizeof(uintmax_t));
+	printf("  -d TIME\tSet the interpreter tick delay. This determines how "
+		   "long the interpreter pauses between executing each instruction. Default is 250ms.\n");
 	printf("  -h     \tDisplay this help message.\n");
+	printf("  -M     \tRun the program in ");
 	printf("  -m SIZE\tSet the length of the memory tape. Default is 1024.\n");
 	printf("  -O SIZE\tSet the max length of the output buffer. Default is 4096.\n");
+	printf("  -P     \tAutomatically pause the interpreter.\n");
 	printf("  -R     \tRecord program input to FILE.\n");
 }
 
@@ -84,7 +91,7 @@ int main(int argc, char *argv[]) {
 	unsigned long long output_tape_len = 4096;
 
 	/* Parse command line args */
-	while ((ch = getopt(argc, argv, "c:d:hMm:O:R")) != -1) {
+	while ((ch = getopt(argc, argv, "c:d:hm:O:PR")) != -1) {
 		switch (ch) {
 			case 'h':
 				// Print help
@@ -102,10 +109,9 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'd':
 				// Set tick delay
-				break;
-			case 'M':
-				// Manual mode
-				
+				// TODO: decide on a format for this arg and write a parser
+				// it should also accept some aliased values, such as 'slow',
+				// 'normal', and 'fast'
 				break;
 			case 'm':
 				// Set memory tape length
@@ -127,6 +133,10 @@ int main(int argc, char *argv[]) {
 				}
 
 				break;
+			case 'P':
+				// Start paused
+				bfvm.stop_after = 0;
+				break;
 			case 'R':
 				break;
 			default:
@@ -139,7 +149,6 @@ int main(int argc, char *argv[]) {
 	StringCassette_init(&bfvm.output, output_tape_len);
 	Queue_init(&bfvm.instructionQueue);
 
-	mtx_init(&bfvm.exec_mutex, mtx_plain);
 
 	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
 
@@ -149,6 +158,10 @@ int main(int argc, char *argv[]) {
 	} else {
 		// FILE not specified
 	}
+
+	// TODO: THIS IS A TEMP CALL dont forget to move it into the above if
+	thrd_t thr;
+	thrd_create(&thr, interpreter_thread, NULL);
 
 	/* Create ncurses ui */
 	ESCDELAY = 10;
@@ -203,6 +216,7 @@ int main(int argc, char *argv[]) {
 					case '[':
 					case ']':
 						// dispatch instruction to interpreter
+						Queue_enqueue(&bfvm.instructionQueue, ch);
 					default:
 						// if in record mode record input
 						// enter key should insert a newline 
