@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <threads.h>
 #include <time.h>
 
@@ -43,7 +44,7 @@ struct BrainfuckVM bfvm = {
 
 	.stop_after = -1,
 
-	.tick_delay = { .tv_sec = 0, .tv_nsec = 2500000000 }
+	.tick_delay = { .tv_sec = 0, .tv_nsec = 250000000 }
 };
 
 void print_help(char *prgname) {
@@ -63,18 +64,20 @@ void print_help(char *prgname) {
 }
 
 /*
- * Gets an integer argument from getopt.
+ * Gets an unsigned integer argument from getopt.
  *
+ * min_val		The minimum value for the integer
  * max_val		The maximum value for the integer
  *
  * Returns the value in optarg.
  * If a value cannot be parsed, then errno is set to EINVAL.
  */
-unsigned long long get_int_arg(unsigned long long max_val) {
+unsigned long long get_uint_arg(unsigned long long min_val, unsigned long long max_val) {
 	char *endptr = NULL;
 	unsigned long long val = strtoull(optarg, &endptr, 10);
 
 	if ((*optarg != '\0' && *endptr != '\0')  // extra characters in arg
+	|| val < min_val  // too small
 	|| val > max_val  // too big
 	|| errno == EINVAL  // invalid
 	|| errno == ERANGE) {  // too big 2
@@ -99,11 +102,10 @@ int main(int argc, char *argv[]) {
 				return 0;
 			case 'c':
 				// Set cell size
-				bfvm.cell_size = get_int_arg(sizeof(uintmax_t));
+				bfvm.cell_size = get_uint_arg(1, sizeof(uintmax_t));
 
 				if (errno == EINVAL) {
-					fprintf(stderr, "Invalid argument for option -c: '%s'\n", optarg);
-					return 1;
+					goto handle_invalid_arg;
 				}
 
 				break;
@@ -115,21 +117,19 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'm':
 				// Set memory tape length
-				bfvm.tape_size = get_int_arg(SIZE_MAX);
+				bfvm.tape_size = get_uint_arg(1, SIZE_MAX);
 
 				if (errno == EINVAL) {
-					fprintf(stderr, "Invalid argument for option -m: '%s'\n", optarg);
-					return 1;
+					goto handle_invalid_arg;
 				}
 
 				break;
 			case 'O':
 				// Set output tape length
-				output_tape_len = get_int_arg(SIZE_MAX);
+				output_tape_len = get_uint_arg(1, SIZE_MAX);
 
 				if (errno == EINVAL) {
-					fprintf(stderr, "Invalid argument for option -O: '%s'\n", optarg);
-					return 1;
+					goto handle_invalid_arg;
 				}
 
 				break;
@@ -142,6 +142,10 @@ int main(int argc, char *argv[]) {
 			default:
 				// Unrecognised option
 				return 1;
+			handle_invalid_arg:
+				fprintf(stderr, "Invalid argument for option -%c: '%s'\n", ch, optarg);
+				fprintf(stderr, "To view the help message, use the -h option\n");
+				return 1;
 		}
 	}
 
@@ -149,12 +153,20 @@ int main(int argc, char *argv[]) {
 	StringCassette_init(&bfvm.output, output_tape_len);
 	Queue_init(&bfvm.instructionQueue);
 
-
 	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
 
 	// alloc tape (zero-initialized)
 	if (optind < argc) {
 		// FILE positional argument specified
+
+		FILE *fp = fopen(argv[optind], "r");
+		char buf[256];
+
+		while (fgets(buf, 256, fp) != NULL) {
+			Queue_enqueue_all(&bfvm.instructionQueue, strlen(buf), buf);
+		}
+
+		fclose(fp);
 	} else {
 		// FILE not specified
 	}
@@ -206,6 +218,10 @@ int main(int argc, char *argv[]) {
 							// ESC
 							goto end_mainloop;
 						}
+						break;
+					case KEY_F(2):
+						// pause/resume interpreter
+						bfvm.stop_after = bfvm.stop_after ? 0 : -1;
 						break;
 					case '+':
 					case '-':

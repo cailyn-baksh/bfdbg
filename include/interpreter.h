@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <threads.h>
 #include <time.h>
 
@@ -30,7 +31,7 @@ struct BrainfuckVM {
 	size_t tape_size;
 
 	size_t current_cell;
-	void **tape;
+	uint8_t *tape;
 
 	_Atomic int stop_after;
 	struct timespec tick_delay;
