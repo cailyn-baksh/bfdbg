@@ -55,24 +55,23 @@ void render_pane(Pane *pane) {
 
 /* Specific pane renderers */
 void MemPaneRenderer(Pane *pane) {
+	const uintmax_t cell_mask = ~(~((uintmax_t)0) << (bfvm.cell_size * 8));
+	const size_t current_cell = bfvm.current_cell;  // obtain this once so it doesnt get changed by another thread
+	const size_t cell_str_len = bfvm.cell_size * 2;  // length of the string representing the cell
+
 	int x = 1, y = 1;
 
-	// calculate this once so that two cells dont get selected in one draw
-	const size_t current_cell_base = bfvm.current_cell * bfvm.cell_size;
+	for (size_t i=0; i < bfvm.tape_size; ++i) {
+		// Obtain cell value
+		uintmax_t cell = *((uintmax_t *)(bfvm.tape + (i * bfvm.cell_size))) & cell_mask;
 
-	for (size_t i=0; i < bfvm.tape_size * bfvm.cell_size; ++i) {
-		uint8_t byte = *(((uint8_t *)bfvm.tape) + i);
+		if (i == current_cell) wattron(pane->window, A_REVERSE);
 
-		if (i >= current_cell_base && i < (current_cell_base + bfvm.cell_size))
-			wattron(pane->window, A_REVERSE);
-		else
-			wattroff(pane->window, A_REVERSE);
-
-		// TODO: draw on a cell-basis instead of a byte basis so that there isnt
-		// TODO: a blank gap between active cell highlighting
-		mvwprintw(pane->window, y, x, "%02X", byte);
+		mvwprintw(pane->window, y, x, "%0*zX", (int)cell_str_len, cell);
 		
-		x += 3;
+		if (i == current_cell) wattroff(pane->window, A_REVERSE);
+
+		x += cell_str_len + 1;
 
 		if (x > pane->w) {
 			x = 1;

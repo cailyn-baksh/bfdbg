@@ -12,12 +12,12 @@ This is more of a todo list for devs than a feature list for users
  - [x] Output view pane
  - [x] Memory view pane
    - [ ] Address column
-   - [ ] Multi-byte cells
+   - [x] Multi-byte cells
  - [ ] Program view pane
  - [ ] Brainfuck interpreter
    - [ ] Variable execution speed
  - [ ] Pane scrolling
- - [ ] Atomic Queue
+ - [x] Atomic Queue
 
 ## Building
 
