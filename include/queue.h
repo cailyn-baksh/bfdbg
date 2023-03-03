@@ -71,8 +71,10 @@ void Queue_free(Queue *queue);
  *
  * queue		The queue to add to
  * value		The value to enqueue
+ *
+ * Returns 0 on success.
  */
-void Queue_enqueue(Queue *queue, char value);
+int Queue_enqueue(Queue *queue, char value);
 
 /*
  * Enqueues multiple values into a queue
@@ -80,15 +82,18 @@ void Queue_enqueue(Queue *queue, char value);
  * queue		The queue to add to
  * n			The number of values to be added
  * values		The values to add
+ *
+ * Returns 0 on success.
  */
-void Queue_enqueue_all(Queue *queue, size_t n, char *values);
+int Queue_enqueue_all(Queue *queue, size_t n, char *values);
 
 /*
  * Dequeues a value from a queue
  *
  * queue		The value to remove from
  *
- * Returns the dequeued value. Returns 0 if no value could be removed.
+ * Returns the dequeued value. Returns 0 and sets errno in case of error. Note
+ * that returning 0 alone does not necessarily indicate failure.
  */
 char Queue_dequeue(Queue *queue);
 

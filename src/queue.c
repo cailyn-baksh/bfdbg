@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>
@@ -5,7 +6,6 @@
 #include "queue.h"
 
 // NOTE: i was stoned when i wrote the thread safety for this so its probably not very good
-// TODO: add error handling for failed mutex acquisitions
 
 #define IMIN(a,b) ({typeof(a) _a = a, _b = b;(_a < _b) ? _a : _b;})
 
@@ -30,7 +30,8 @@ void Queue_free(Queue *queue) {
 }
 
 /*
- * Helper function which allocates a new node
+ * Helper function which allocates a new node. Both head and tail mutexes must
+ * be acquired before calling this function.
  */
 void _Queue_alloc_node(Queue *queue) {
 	struct QueueNode *newNode = malloc(sizeof(struct QueueNode));
@@ -52,7 +53,7 @@ void _Queue_alloc_node(Queue *queue) {
 	queue->_tail = newNode;
 }
 
-void Queue_enqueue(Queue *queue, char value) {
+int Queue_enqueue(Queue *queue, char value) {
 	bool isTailLocked = false;
 
 	if (queue->_tail == NULL || queue->_tail->length == (QUEUE_NODE_SIZE - queue->_tail->_head)) {
@@ -66,6 +67,8 @@ void Queue_enqueue(Queue *queue, char value) {
 			// We still need the tail lock, so indicate that its already locked
 			mtx_unlock(&queue->_head_lock);
 			isTailLocked = true;
+		} else {
+			return -1;
 		}
 	}
 
@@ -77,15 +80,19 @@ void Queue_enqueue(Queue *queue, char value) {
 
 		// unlock tail
 		mtx_unlock(&queue->_tail_lock);
+	} else {
+		return -1;
 	}
 
 	// atomically increase the queue's length
 	++queue->_tail->length;
 	++queue->length;
+
+	return 0;
 }
 
 
-void Queue_enqueue_all(Queue *queue, size_t n, char *values) {
+int Queue_enqueue_all(Queue *queue, size_t n, char *values) {
 	bool isTailLocked = false;
 
 	for (size_t i=0; i < n; ) {
@@ -102,12 +109,12 @@ void Queue_enqueue_all(Queue *queue, size_t n, char *values) {
 				// We still need the tail lock, so indicate that its already locked
 				mtx_unlock(&queue->_head_lock);
 				isTailLocked = true;
+			} else {
+				// failed to acquire lock
+				errno = ENOLCK;
+				return -1;
 			}
 		}
-
-		// figure out how much space is left in this node
-		// copy min(remaining_space, n-i) values into this node
-		// add the number of copied values to i
 
 		// Calculate the number of bytes to copy; either the maximum remaining
 		// space or the total remaining bytes, whichever is less
@@ -124,6 +131,10 @@ void Queue_enqueue_all(Queue *queue, size_t n, char *values) {
 
 			// Unlock tail
 			mtx_unlock(&queue->_tail_lock);
+		} else {
+			// failed to acquire lock
+			errno = ENOLCK;
+			return -1;
 		}
 
 		// Increment i by the number of copied bytes
@@ -133,14 +144,13 @@ void Queue_enqueue_all(Queue *queue, size_t n, char *values) {
 		queue->length += nbytes;
 	}
 
+	return 0;
 }
 
 char Queue_dequeue(Queue *queue) {
 	if (queue->_head == NULL || queue->_head->length == 0) {
 		// No values to dequeue so return nothing
-		// yeah i know this isnt a great way to report errors but since this is
-		// a specialized implementation for this application, and silently
-		// returning zero wont hurt anything i think its fine
+		errno = ENODATA;
 		return 0;
 	}
 
@@ -149,6 +159,10 @@ char Queue_dequeue(Queue *queue) {
 	// Lock head and read front value
 	if (mtx_lock(&queue->_head_lock) == thrd_success) {
 		val = queue->_head->_data[queue->_head->_head];
+	} else {
+		// Couldn't acquire lock; fail
+		errno = ENOLCK;
+		return 0;
 	}
 
 	// Reduce the length and advance the head
