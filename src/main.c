@@ -34,29 +34,48 @@
 #define THRD_NANOSLEEP(ns) thrd_sleep(&(struct timespec){.tv_nsec=ns}, NULL)
 #define THRD_SLEEP(s) thrd_sleep(&(struct timespec){.tv_sec=s}, NULL)
 
+#define KEY_CTRL(key) ((key) & 0x1F)
+
 // TODO: should this be atomic?
 struct BrainfuckVM bfvm = {
 	.cell_size = 1,
 	.tape_size = 1024,
+	.output_tape_size = 4096,
 
 	.current_cell = 0,
 	.tape = NULL,
 
 	.stop_after = -1,
-
-	.tick_delay = { .tv_sec = 0, .tv_nsec = 250000000 }
+	.tick_delay = { .tv_sec = 0, .tv_nsec = 250000000 },
+	.die = false
 };
 
+void reset_vm() {
+	// Reset the vm to startup settings
+	// free resources
+	free(bfvm.tape);
+	Queue_free(&bfvm.instructionQueue);
+	StringCassette_free(&bfvm.output);
+
+	bfvm.current_cell = 0;
+	bfvm.die = false;
+
+	StringCassette_init(&bfvm.output, bfvm.output_tape_size);
+	Queue_init(&bfvm.instructionQueue);
+
+	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
+}
+
 void print_help(char *prgname) {
-	printf("Usage: %s [-hR] [-c SIZE] [-m SIZE] [FILE]\n\n", prgname);
+	printf("Usage: %s [-hPR] [-c SIZE] [-d TIME] [-m SIZE] [-O SIZE] [FILE]\n\n", prgname);
 
 	printf("Options:\n");
-	printf("  -c SIZE\tSet the cell size in bytes. This must be an integer \n"
+	printf("  -c SIZE\tSet the cell size in bytes. This must be an integer\n"
 		   "         \tbetween 1 and %zd. Default is 1.\n", sizeof(uintmax_t));
-	printf("  -d TIME\tSet the interpreter tick delay. This determines how "
-		   "long the interpreter pauses between executing each instruction. Default is 250ms.\n");
+	printf("  -d TIME\tSet the interpreter tick delay. This determines how\n"
+		   "         \tlong the interpreter pauses between executing each\n"
+		   "         \tinstruction. Default is 250ms.\n");
 	printf("  -h     \tDisplay this help message.\n");
-	printf("  -M     \tRun the program in ");
 	printf("  -m SIZE\tSet the length of the memory tape. Default is 1024.\n");
 	printf("  -O SIZE\tSet the max length of the output buffer. Default is 4096.\n");
 	printf("  -P     \tAutomatically pause the interpreter.\n");
@@ -91,7 +110,6 @@ unsigned long long get_uint_arg(unsigned long long min_val, unsigned long long m
 int main(int argc, char *argv[]) {
 	/* Init */
 	int ch;
-	unsigned long long output_tape_len = 4096;
 
 	/* Parse command line args */
 	while ((ch = getopt(argc, argv, "c:d:hm:O:PR")) != -1) {
@@ -126,7 +144,7 @@ int main(int argc, char *argv[]) {
 				break;
 			case 'O':
 				// Set output tape length
-				output_tape_len = get_uint_arg(1, SIZE_MAX);
+				bfvm.output_tape_size = get_uint_arg(1, SIZE_MAX);
 
 				if (errno == EINVAL) {
 					goto handle_invalid_arg;
@@ -150,7 +168,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Start interpreter thread */
-	StringCassette_init(&bfvm.output, output_tape_len);
+	StringCassette_init(&bfvm.output, bfvm.output_tape_size);
 	Queue_init(&bfvm.instructionQueue);
 
 	bfvm.tape = calloc(bfvm.tape_size, bfvm.cell_size);
@@ -171,9 +189,7 @@ int main(int argc, char *argv[]) {
 		// FILE not specified
 	}
 
-	// TODO: THIS IS A TEMP CALL dont forget to move it into the above if
-	thrd_t thr;
-	thrd_create(&thr, interpreter_thread, NULL);
+	thrd_create(&bfvm.interpreter_thread, interpreter_thread, NULL);
 
 	/* Create ncurses ui */
 	ESCDELAY = 10;
@@ -222,6 +238,22 @@ int main(int argc, char *argv[]) {
 					case KEY_F(2):
 						// pause/resume interpreter
 						bfvm.stop_after = bfvm.stop_after ? 0 : -1;
+						break;
+					case KEY_CTRL('R'):
+						// reset the VM
+
+						// kill the interpreter thread
+						bfvm.die = true;
+						thrd_join(bfvm.interpreter_thread, NULL);
+
+						// reset the interpreter
+						reset_vm();
+
+						// start a new interpreter thread
+						thrd_create(&bfvm.interpreter_thread, interpreter_thread, NULL);
+
+						// notify the user that a reset has occured
+						flash();
 						break;
 					case '+':
 					case '-':

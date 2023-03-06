@@ -10,6 +10,10 @@ int interpreter_thread(void *arg) {
 	uintmax_t *cell = NULL;
 
 	for (;;) {
+		if (bfvm.die) {
+			return 0;
+		}
+
 		// If vm is not halted and there are instructions to execute
 		if (bfvm.stop_after != 0 && bfvm.instructionQueue.length > 0) {
 			uintmax_t tmp;
@@ -62,8 +66,8 @@ int interpreter_thread(void *arg) {
 			if (bfvm.stop_after > 0) --bfvm.stop_after;
 		}
 
-		thrd_sleep(&bfvm.tick_delay, NULL);
-		//thrd_sleep(&(struct timespec){.tv_sec=1}, NULL);
+		// Sleep if not in manual mode
+		if (bfvm.stop_after != -1) thrd_sleep(&bfvm.tick_delay, NULL);
 	}
 	
 	return 0;
